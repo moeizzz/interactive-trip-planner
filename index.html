@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Trip ERP Deployment & Business Planner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons CDN -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        canvas: '#080c16',
+                        panel: '#0f1626',
+                        inner: '#131c30',
+                        borderdark: '#1e293b',
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-[#080c16] dark:text-slate-100 font-sans min-h-screen transition-colors duration-200 selection:bg-indigo-500 selection:text-white pb-16">
+
+    <!-- Top Telemetry & Live Weather Bar -->
+    <div class="bg-white/90 dark:bg-[#0b1120] border-b border-slate-200 dark:border-slate-800/90 px-4 py-2.5 text-xs no-print sticky top-0 z-30 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            
+            <!-- Left: Multi-Trip Switcher & "+ New Trip" Button -->
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5">
+                    <i class="ph-fill ph-briefcase text-indigo-500 text-sm"></i>
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 hidden sm:inline">Trip:</span>
+                    <select id="tripSelector" onchange="switchTrip(this.value)" class="bg-transparent font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer pr-1 text-xs sm:text-sm">
+                        <!-- Populated via JS -->
+                    </select>
+                </div>
+
+                <button onclick="openTripModal('create')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20 transition cursor-pointer">
+                    <i class="ph-bold ph-plus-circle text-sm"></i>
+                    <span>+ New Trip</span>
+                </button>
+
+                <button onclick="openTripModal('edit')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-[#131c30] dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 transition cursor-pointer" title="Edit Current Trip Details">
+                    <i class="ph-bold ph-sliders-horizontal text-sm"></i>
+                    <span class="hidden md:inline">Edit Trip</span>
+                </button>
+
+                <span id="countdownBadge" class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                    <i class="ph-fill ph-clock-countdown mr-1"></i> Loading...
+                </span>
+            </div>
+
+            <!-- Right: Live Open-Meteo Weather Widget & Theme Toggle -->
+            <div class="flex flex-wrap items-center gap-2.5">
+                <!-- Live Auto-Updating Weather Pill -->
+                <div id="weatherWidget" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-200">
+                    <i id="weatherIcon" class="ph-fill ph-cloud-sun text-amber-400 text-base"></i>
+                    <span id="weatherText" class="font-mono text-xs font-medium">Fetching live weather...</span>
+                    <button onclick="fetchLiveWeather(true)" class="text-slate-400 hover:text-indigo-400 transition ml-1 cursor-pointer" title="Refresh Live Weather (Open-Meteo API)">
+                        <i id="weatherRefreshIcon" class="ph-bold ph-arrows-clockwise text-xs"></i>
+                    </button>
+                </div>
+
+                <button id="themeToggle" class="hover:text-white flex items-center gap-1.5 bg-slate-100 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-xl transition cursor-pointer" title="Toggle Dark/Light Theme">
+                    <i id="themeIcon" class="ph-fill ph-sun text-amber-400 text-sm"></i>
+                    <span id="themeText" class="hidden sm:inline font-medium">Light</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5">
+
+        <!-- Trip Banner & Quick Actions Header Card -->
+        <div class="panel-card bg-white dark:bg-[#0f1626] rounded-2xl p-5 shadow-md border border-slate-200 dark:border-slate-800/90 mb-5">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span id="tripRouteBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                            <i class="ph-bold ph-navigation-arrow"></i> Lahore → Sahiwal
+                        </span>
+                        <span id="tripDateBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            <i class="ph-bold ph-calendar-blank"></i> Sat, Oct 17, 2026 • 08:30 AM (7 Days)
+                        </span>
+                        <span id="tripScopeBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-mono font-medium bg-slate-100 dark:bg-[#131c30] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            <i class="ph-fill ph-database text-indigo-400"></i> ERP Setup & UAT
+                        </span>
+                    </div>
+                    <h1 id="tripMainTitle" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                        Sahiwal ERP Deployment & Packing Checklist
+                    </h1>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap items-center gap-2 no-print">
+                    <button onclick="openAddModal()" class="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-sm shadow-indigo-500/20 transition cursor-pointer">
+                        <i class="ph-bold ph-plus-circle text-base"></i>
+                        <span>Add Need / Item</span>
+                    </button>
+                    <button onclick="openCategoryModal()" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#131c30] dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition cursor-pointer">
+                        <i class="ph-bold ph-folder-plus text-base text-indigo-400"></i>
+                        <span>+ Category</span>
+                    </button>
+                    <button onclick="openMeetingModal()" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl shadow-sm shadow-emerald-500/20 transition cursor-pointer">
+                        <i class="ph-bold ph-calendar-plus text-base"></i>
+                        <span>+ Meeting</span>
+                    </button>
+                    <button onclick="window.print()" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#131c30] dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold text-xs sm:text-sm px-3 py-2 rounded-xl transition cursor-pointer" title="Print Checklist & Schedule">
+                        <i class="ph-bold ph-printer text-base"></i>
+                    </button>
+                    <div class="relative" id="moreActionsDropdown">
+                        <button onclick="toggleDropdown()" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-[#131c30] dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-medium text-sm px-2.5 py-2 rounded-xl transition cursor-pointer" title="More Options">
+                            <i class="ph-bold ph-dots-three-vertical text-base"></i>
+                        </button>
+                        <div id="dropdownMenu" class="hidden absolute right-0 mt-2 w-56 bg-white dark:bg-[#0f1626] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 z-40">
+                            <button onclick="uncheckAllItems()" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer">
+                                <i class="ph ph-square text-base text-slate-400"></i> Uncheck All Items
+                            </button>
+                            <button onclick="checkAllCritical()" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer">
+                                <i class="ph-fill ph-flame text-base text-rose-500"></i> Filter Critical Only
+                            </button>
+                            <div class="my-1 border-t border-slate-200 dark:border-slate-800"></div>
+                            <button onclick="deleteCurrentTrip()" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2 cursor-pointer">
+                                <i class="ph ph-trash text-base"></i> Delete Current Trip
+                            </button>
+                            <button onclick="openResetConfirmModal()" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 cursor-pointer">
+                                <i class="ph ph-arrow-counter-clockwise text-base"></i> Factory Reset All Trips
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overall Packing & Deployment Readiness Card -->
+        <section class="panel-card bg-white dark:bg-[#0f1626] rounded-2xl p-5 shadow-lg border border-slate-200 dark:border-slate-800/90 mb-5 transition-all">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+                <div class="flex items-center gap-4">
+                    <div id="ReadinessBadge" class="w-14 h-14 rounded-2xl bg-indigo-600 text-white font-extrabold text-xl flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
+                        0%
+                    </div>
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-snug">
+                                Overall Packing & Deployment Readiness
+                            </h2>
+                            <span id="statusPill" class="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 dark:bg-[#131c30] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80">
+                                Not Started
+                            </span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            <span id="completedCount" class="font-bold text-slate-900 dark:text-white">0</span> of 
+                            <span id="totalCount" class="font-bold text-slate-900 dark:text-white">0</span> items packed • 
+                            <span id="criticalRemainingText" class="text-rose-500 font-semibold">0 Critical Go-Live items pending</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Mini Category Pills -->
+                <div id="miniCategoryStats" class="flex flex-wrap items-center gap-2">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- Main Progress Bar -->
+            <div class="w-full h-3 bg-slate-100 dark:bg-[#131c30] rounded-full overflow-hidden p-0.5 border border-slate-200/60 dark:border-slate-800">
+                <div id="mainProgressBar" class="h-full rounded-full bg-gradient-to-r from-indigo-500 via-blue-500 to-emerald-400 transition-all duration-500 ease-out" style="width: 0%"></div>
+            </div>
+        </section>
+
+        <!-- Primary Workspace Mode Switcher -->
+        <section class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 mb-5 no-print">
+            <div class="inline-flex p-1.5 rounded-2xl bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800/90 overflow-x-auto">
+                <button onclick="setWorkspaceMode('checklist')" id="mode-checklist" class="workspace-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap bg-indigo-600 text-white shadow-sm cursor-pointer">
+                    <i class="ph-fill ph-check-square-offset text-base"></i>
+                    <span>Packing & Needs Checklist</span>
+                </button>
+                <button onclick="setWorkspaceMode('planner')" id="mode-planner" class="workspace-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131c30] cursor-pointer">
+                    <i class="ph-fill ph-calendar-check text-base text-emerald-400"></i>
+                    <span id="plannerTabTitle">Business & Meeting Planner</span>
+                </button>
+                <button onclick="setWorkspaceMode('split')" id="mode-split" class="workspace-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition whitespace-nowrap text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131c30] cursor-pointer">
+                    <i class="ph-fill ph-columns text-base text-amber-400"></i>
+                    <span>Split View (Col-6 / Col-6)</span>
+                </button>
+            </div>
+
+            <!-- Planner Quick Summary Pill -->
+            <div class="flex items-center justify-between sm:justify-end gap-3 bg-white dark:bg-[#0f1626] px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-800/90 text-xs sm:text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-slate-500 dark:text-slate-400 font-medium">Schedule:</span>
+                    <span id="meetingStatsText" class="font-bold text-slate-900 dark:text-white">0/0 Sessions</span>
+                </div>
+                <span class="text-slate-300 dark:text-slate-700">|</span>
+                <div class="flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400 font-mono font-semibold">
+                    <i class="ph-bold ph-timer"></i>
+                    <span id="totalPlannedHoursText">0h Planned</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Master Workspace Grid (Supports Single Mode or Col-6 / Col-6 Split View) -->
+        <div id="workspaceGrid" class="grid grid-cols-1 gap-6">
+
+            <!-- LEFT / CHECKLIST COLUMN -->
+            <div id="checklistColumn" class="space-y-5">
+                <!-- Filter Tabs & Search Bar -->
+                <section class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 no-print">
+                    <div class="flex items-center gap-1.5 bg-white dark:bg-[#0f1626] p-1.5 rounded-xl border border-slate-200 dark:border-slate-800/90 overflow-x-auto">
+                        <button onclick="setFilter('all')" data-filter="all" class="filter-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition whitespace-nowrap bg-indigo-600 text-white shadow-sm cursor-pointer">
+                            All Items
+                        </button>
+                        <button onclick="setFilter('pending')" data-filter="pending" class="filter-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131c30] cursor-pointer">
+                            Pending
+                        </button>
+                        <button onclick="setFilter('completed')" data-filter="completed" class="filter-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131c30] cursor-pointer">
+                            Completed
+                        </button>
+                        <button onclick="setFilter('critical')" data-filter="critical" class="filter-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap text-rose-500 hover:bg-rose-500/10 flex items-center gap-1.5 cursor-pointer">
+                            <i class="ph-fill ph-flame"></i> Critical for Go-Live
+                        </button>
+                    </div>
+
+                    <!-- Search Input -->
+                    <div class="relative flex-1 max-w-md">
+                        <i class="ph ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base"></i>
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            oninput="handleSearch(this.value)"
+                            placeholder="Search scripts, cables, adapters, clothes..." 
+                            class="w-full pl-10 pr-9 py-2 bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800/90 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                        >
+                        <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                            <i class="ph-fill ph-x-circle text-base"></i>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Categories Checklist Grid -->
+                <main id="categoriesContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Dynamically rendered via JS -->
+                </main>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden panel-card bg-white dark:bg-[#0f1626] rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-800 my-6">
+                    <div class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-[#131c30] text-slate-400 flex items-center justify-center mx-auto mb-3">
+                        <i class="ph ph-package text-2xl"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white">No checklist items found</h3>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs max-w-md mx-auto mt-1">
+                        Clear your active search filter or click "Add Need / Item" to build your custom packing list.
+                    </p>
+                    <div class="mt-4 flex items-center justify-center gap-2">
+                        <button onclick="resetFilters()" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-[#131c30] text-slate-800 dark:text-slate-200 text-xs font-semibold hover:opacity-90 transition cursor-pointer">
+                            Show All Items
+                        </button>
+                        <button onclick="openAddModal()" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 transition cursor-pointer">
+                            + Add First Item
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT / BUSINESS & MEETING PLANNER COLUMN -->
+            <div id="plannerColumn" class="hidden space-y-5">
+                <div class="panel-card bg-white dark:bg-[#0f1626] rounded-2xl p-5 border border-slate-200 dark:border-slate-800/90 flex flex-col gap-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <h2 id="plannerHeaderTitle" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <i class="ph-fill ph-calendar-star text-emerald-400 text-xl"></i>
+                                <span>Business & Meeting Planner</span>
+                            </h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Adjust meeting durations live with <strong class="text-slate-700 dark:text-slate-200">+15m / -15m</strong> or click <strong class="text-emerald-400">+ Schedule Session</strong> for any day of your trip.
+                            </p>
+                        </div>
+                        <button onclick="openMeetingModal()" class="no-print inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm px-4 py-2 rounded-xl shadow-sm transition cursor-pointer shrink-0 self-start sm:self-auto">
+                            <i class="ph-bold ph-plus-circle text-base"></i>
+                            <span>Schedule Session</span>
+                        </button>
+                    </div>
+
+                    <!-- Dynamic Day Filter Pills -->
+                    <div id="dayFilterContainer" class="flex items-center gap-1.5 overflow-x-auto pb-1 no-print">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+                <!-- Day-by-Day Planner Grid (Col-6 / Col-6 Side-by-Side) -->
+                <div id="plannerDaysContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- MODAL 1: CREATE / EDIT CUSTOM TRIP MODAL -->
+    <div id="tripModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 no-print">
+        <div class="panel-card bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+                <h3 id="tripModalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="ph-fill ph-airplane-takeoff text-indigo-500"></i>
+                    <span>Create New Custom Trip & Planner</span>
+                </h3>
+                <button onclick="closeTripModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <form id="tripForm" onsubmit="saveTripForm(event)" class="space-y-4 mt-4">
+                <input type="hidden" id="tripFormMode" value="create">
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                        Trip Name / Project Title *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="tripNameInput" 
+                        required 
+                        placeholder="e.g., Multan Branch ERP Audit, Islamabad Client Kickoff..."
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Origin City *
+                        </label>
+                        <input 
+                            type="text" 
+                            id="tripOriginInput" 
+                            required 
+                            value="Lahore"
+                            placeholder="e.g., Lahore"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Destination City (Auto-Weather) *
+                        </label>
+                        <input 
+                            type="text" 
+                            id="tripDestInput" 
+                            required 
+                            placeholder="e.g., Sahiwal, Multan, Karachi, Dubai"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Departure Date *
+                        </label>
+                        <input 
+                            type="date" 
+                            id="tripDateInput" 
+                            required 
+                            class="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Departure Time *
+                        </label>
+                        <input 
+                            type="time" 
+                            id="tripTimeInput" 
+                            required 
+                            value="08:30"
+                            class="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Duration (Days) *
+                        </label>
+                        <input 
+                            type="number" 
+                            id="tripDurationInput" 
+                            required 
+                            min="1" 
+                            max="30" 
+                            value="5"
+                            class="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                        Mission Scope / Trip Purpose
+                    </label>
+                    <input 
+                        type="text" 
+                        id="tripScopeInput" 
+                        placeholder="e.g., ERP Setup & UAT, Client Audit, Branch Training..."
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                </div>
+
+                <!-- Template Preset Selector -->
+                <div id="tripTemplateBlock">
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                        Starting Checklist & Planner Template *
+                    </label>
+                    <select 
+                        id="tripTemplateInput" 
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="erp">ERP Implementation Preset (Full 27-item Tech + Field Packing List)</option>
+                        <option value="business">Short Business Trip Preset (Essential Laptop, Docs, Clothes & Meds)</option>
+                        <option value="blank">Blank Custom Trip (Start with empty categories & build your own needs)</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="closeTripModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer">
+                        Save Trip & Load Workspace
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ADD CUSTOM CATEGORY MODAL -->
+    <div id="categoryModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 no-print">
+        <div class="panel-card bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="ph-fill ph-folder-plus text-indigo-500"></i>
+                    <span>Add Custom Checklist Category</span>
+                </h3>
+                <button onclick="closeCategoryModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="saveCustomCategory(event)" class="space-y-4 mt-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                        Category Full Title *
+                    </label>
+                    <input type="text" id="catNameInput" required placeholder="e.g., Network & Barcode Hardware" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Short Pill Label *
+                        </label>
+                        <input type="text" id="catShortInput" required placeholder="e.g., Scanners" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Accent Color
+                        </label>
+                        <select id="catAccentInput" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="indigo">Indigo</option>
+                            <option value="cyan">Cyan</option>
+                            <option value="emerald">Emerald</option>
+                            <option value="amber">Amber</option>
+                            <option value="rose">Rose</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                        Description / Subtitle
+                    </label>
+                    <input type="text" id="catDescInput" placeholder="e.g., Thermal printers, handheld POS & cables" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="closeCategoryModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer">
+                        Create Category
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ADD / EDIT MEETING PLANNER MODAL -->
+    <div id="meetingModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 no-print">
+        <div class="panel-card bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+                <h3 id="meetingModalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="ph-fill ph-calendar-plus text-emerald-500"></i>
+                    <span>Schedule Meeting / Implementation Task</span>
+                </h3>
+                <button onclick="closeMeetingModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <form id="meetingForm" onsubmit="saveMeeting(event)" class="space-y-4 mt-4">
+                <input type="hidden" id="editMeetingId">
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                        Session / Meeting Title *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="meetingTitleInput" 
+                        required 
+                        placeholder="e.g., Chart of Accounts & Opening Trial Balance Sign-Off"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Trip Day *
+                        </label>
+                        <select 
+                            id="meetingDayInput" 
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Session Type *
+                        </label>
+                        <select 
+                            id="meetingTypeInput" 
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                            <option value="milestone">Go-Live Milestone</option>
+                            <option value="technical">Tech & DB Deployment</option>
+                            <option value="training">User Training / UAT</option>
+                            <option value="client">Stakeholder Meeting</option>
+                            <option value="logistics">Travel & Logistics</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Custom Start Time & Duration Controls -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-[#131c30] p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Start Time *
+                        </label>
+                        <input 
+                            type="time" 
+                            id="meetingStartInput" 
+                            required 
+                            value="09:30"
+                            oninput="updateEndTimePreview()"
+                            class="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Duration (Mins) *
+                        </label>
+                        <input 
+                            type="number" 
+                            id="meetingDurationInput" 
+                            required 
+                            min="15" 
+                            max="720" 
+                            step="15" 
+                            value="90"
+                            oninput="updateEndTimePreview()"
+                            class="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                            Calculated End
+                        </label>
+                        <div id="calculatedEndPreview" class="w-full px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold flex items-center justify-center h-[38px]">
+                            11:00 AM (1h 30m)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Location / Room
+                        </label>
+                        <input 
+                            type="text" 
+                            id="meetingLocationInput" 
+                            placeholder="e.g., Client Server Room / Conference Room"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Attendees / Stakeholders
+                        </label>
+                        <input 
+                            type="text" 
+                            id="meetingAttendeesInput" 
+                            placeholder="e.g., CFO, Store Manager, IT Admin"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                        Agenda / Key Deliverables
+                    </label>
+                    <textarea 
+                        id="meetingNotesInput" 
+                        rows="2"
+                        placeholder="e.g., Verify Purchase Return subledger SQL scripts and glItemUnitCost() alignment"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    ></textarea>
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="closeMeetingModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition cursor-pointer">
+                        Save Session
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 4: ADD / EDIT CHECKLIST ITEM MODAL -->
+    <div id="itemModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 no-print">
+        <div class="panel-card bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+                <h3 id="modalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="ph-fill ph-plus-circle text-indigo-500"></i>
+                    <span>Add Packing / Deployment Need</span>
+                </h3>
+                <button onclick="closeItemModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <form id="itemForm" onsubmit="saveItem(event)" class="space-y-4 mt-4">
+                <input type="hidden" id="editItemId">
+                
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                        Item / Requirement Description *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="itemTitleInput" 
+                        required 
+                        placeholder="e.g., Client VPN credentials & AnyDesk/TeamViewer installer"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Category *
+                        </label>
+                        <select 
+                            id="itemCategoryInput" 
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                            Priority Level *
+                        </label>
+                        <select 
+                            id="itemPriorityInput" 
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="critical">Critical for Go-Live</option>
+                            <option value="essential" selected>Essential</option>
+                            <option value="standard">Standard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                        Notes / Quantity / Reminder (Optional)
+                    </label>
+                    <input 
+                        type="text" 
+                        id="itemNoteInput" 
+                        placeholder="e.g., Verify checksum before departure"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#131c30] border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="closeItemModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer">
+                        Save Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 5: FACTORY RESET CONFIRMATION MODAL -->
+    <div id="resetModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 no-print">
+        <div class="panel-card bg-white dark:bg-[#0f1626] border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div class="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-4">
+                <i class="ph-bold ph-warning-circle text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Factory Reset All Trips?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                This will restore the default Sahiwal ERP trip and remove any custom trips or edits saved in your browser.
+            </p>
+            <div class="flex items-center justify-end gap-2.5 mt-6">
+                <button onclick="closeResetConfirmModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer">
+                    Cancel
+                </button>
+                <button onclick="confirmResetToDefault()" class="px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer">
+                    Yes, Reset Everything
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2.5 bg-slate-900 dark:bg-indigo-600 text-white px-4 py-3 rounded-xl shadow-2xl text-xs sm:text-sm font-semibold transition-all duration-300 no-print">
+        <i class="ph-fill ph-check-circle text-emerald-300 text-lg"></i>
+        <span id="toastMessage">Saved</span>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+/* Custom scrollbar & smooth transitions */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(8, 12, 22, 0.4);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.35);
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.6);
+}
+
+.checkbox-wrapper input:checked + div {
+    background-color: #10b981;
+    border-color: #10b981;
+}
+.checkbox-wrapper input:checked + div svg {
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* Exact Screenshot 2 Dark Slate Boxed Card Aesthetic */
+.dark body {
+    background-color: #080c16;
+    color: #f8fafc;
+}
+.dark .panel-card {
+    background-color: #0f1626;
+    border-color: rgba(30, 41, 59, 0.85);
+}
+.dark .inner-box-card {
+    background-color: #131c30;
+    border-color: rgba(30, 41, 59, 0.95);
+}
+.dark .inner-box-card:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+}
+
+/* Print optimization */
+@media print {
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+    .no-print {
+        display: none !important;
+    }
+    .category-card, .panel-card, .inner-box-card {
+        break-inside: avoid;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+        margin-bottom: 1rem !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+    .dark body, .dark div, .dark span, .dark p, .dark h1, .dark h2, .dark h3, .dark h4 {
+        background-color: transparent !important;
+        color: #000000 !important;
+        border-color: #cbd5e1 !important;
+    }
+}
+
+@keyframes pulse-subtle {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+}
+.animate-complete {
+    animation: pulse-subtle 0.4s ease-out;
+}
